@@ -20,7 +20,11 @@
  */
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#if defined(__OpenBSD__)
 #include <sys/queue.h>
+#else
+#include "queue.h"
+#endif /* __OpenBSD__ */
 #include <sys/socket.h>
 #include <sys/syslog.h>
 #include <sys/uio.h>
@@ -46,6 +50,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#ifndef __dead
+#define __dead		__attribute__((__noreturn__))
+#endif
 
 #include "log.h"
 #include "dhcp6leased.h"
@@ -133,12 +141,16 @@ frontend(int debug, int verbose)
 	if (chdir("/") == -1)
 		fatal("chdir(\"/\")");
 
+#if defined(__OpenBSD__)
 	if (unveil("/", "") == -1)
 		fatal("unveil /");
 	if (unveil(NULL, NULL) == -1)
 		fatal("unveil");
+#endif /* OpenBSD */
 
+#if !defined(__APPLE__)
 	setproctitle("%s", "frontend");
+#endif /* __APPLE__ */
 	log_procinit("frontend");
 
 	if ((ioctlsock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0)) == -1)
@@ -149,8 +161,10 @@ frontend(int debug, int verbose)
 	    setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid))
 		fatal("can't drop privileges");
 
+#if defined(__OpenBSD__)
 	if (pledge("stdio unix recvfd route", NULL) == -1)
 		fatal("pledge");
+#endif /* OpenBSD */
 
 	if (uname(&utsname) == -1)
 		fatal("uname");
@@ -589,7 +603,9 @@ update_iface(uint32_t if_index)
 
 			if_data = (struct if_data *)ifa->ifa_data;
 			ifinfo.link_state = if_data->ifi_link_state;
+#ifdef RTABLE_ANY
 			ifinfo.rdomain = if_data->ifi_rdomain;
+#endif /* RTABLE_ANY */
 			goto out;
 		}
 		default:
@@ -657,7 +673,11 @@ route_receive(int fd, short events, void *arg)
 	if (rtm->rtm_version != RTM_VERSION)
 		return;
 
+#if defined(__OpenBSD__)
 	sa = (struct sockaddr *)(buf + rtm->rtm_hdrlen);
+#elif defined(__FreeBSD__) || defined(__APPLE__)
+	sa = (struct sockaddr *)(buf + sizeof(struct rt_msghdr));
+#endif
 	get_rtaddrs(rtm->rtm_addrs, sa, rti_info);
 
 	handle_route_message(rtm, rti_info);

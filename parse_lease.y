@@ -24,7 +24,11 @@
 
 %{
 #include <sys/types.h>
+#if defined(__OpenBSD__)
 #include <sys/queue.h>
+#else
+#include "queue.h"
+#endif
 #include <sys/socket.h>
 #include <sys/stat.h>
 
@@ -46,6 +50,10 @@
 #include <syslog.h>
 #include <unistd.h>
 #include <vis.h>
+
+#ifndef __dead
+#define __dead		__attribute__((__noreturn__))
+#endif
 
 #include "log.h"
 #include "dhcp6leased.h"
@@ -88,12 +96,12 @@ grammar		: /* empty */
 
 ia_pd		: IAPD NUMBER STRING NUMBER {
 			if ($2 < 0 || $2 > MAX_IA) {
-				yyerror("invalid IA_ID %lld", $2);
+				yyerror("invalid IA_ID %jd", $2);
 				free($3);
 				YYERROR;
 			}
 			if ($4 < 1 || $4 > 128) {
-				yyerror("invalid prefix length %lld", $4);
+				yyerror("invalid prefix length %jd", $4);
 				free($3);
 				ifinfo->pds[$2].prefix_len = 0;
 				YYERROR;

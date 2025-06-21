@@ -20,7 +20,11 @@
  */
 
 #include <sys/types.h>
+#if defined(__OpenBSD__)
 #include <sys/queue.h>
+#else
+#include "queue.h"
+#endif /* __OpenBSD__ */
 #include <sys/socket.h>
 #include <sys/syslog.h>
 #include <sys/uio.h>
@@ -44,6 +48,17 @@
 #include <time.h>
 #include <unistd.h>
 #include <vis.h>
+
+#ifndef __dead
+#define __dead		__attribute__((__noreturn__))
+#endif
+
+#ifndef LINK_STATE_IS_UP
+#if defined(LINK_STATE_UP) && defined(LINK_STATE_UNKNOWN)
+#define LINK_STATE_IS_UP(_s)    \
+          ((_s) >= LINK_STATE_UP || (_s) == LINK_STATE_UNKNOWN)
+#endif  /* LINK_STATE_UP && LINK_STATE_UNKNOWN */
+#endif /* LINK_STATE_IS_UP */
 
 #include "log.h"
 #include "dhcp6leased.h"
@@ -186,21 +201,39 @@ engine(int debug, int verbose)
 	if (chdir("/") == -1)
 		fatal("chdir(\"/\")");
 
+#if defined(__OpenBSD__)
 	if (unveil("/", "") == -1)
 		fatal("unveil /");
 	if (unveil(NULL, NULL) == -1)
 		fatal("unveil");
+#endif /* OpenBSD */
 
+#if !defined(__APPLE__)
 	setproctitle("%s", "engine");
+#endif /* __APPLE__ */
 	log_procinit("engine");
 
+#if !defined(__APPLE__)
 	if (setgroups(1, &pw->pw_gid) ||
 	    setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) ||
 	    setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid))
 		fatal("can't drop privileges");
+#else
+	if (setgroups(1, &pw->pw_gid) < 0) {
+		fatal("setgroups: can't drop privileges");
+    }
+    if (setregid(pw->pw_gid, pw->pw_gid) < 0) {
+		fatal("setregid: can't drop privileges");
+    }
+    if (setreuid(pw->pw_uid, pw->pw_uid) < 0) {
+		fatal("setreuid: can't drop privileges");
+    }
+#endif /* __APPLE__ */
 
+#if defined(__OpenBSD__)
 	if (pledge("stdio recvfd", NULL) == -1)
 		fatal("pledge");
+#endif /* OpenBSD */
 
 	event_init();
 
@@ -436,8 +469,10 @@ engine_dispatch_main(int fd, short event, void *bula)
 			    iev_frontend);
 			event_add(&iev_frontend->ev, NULL);
 
+#if defined(__OpenBSD__)
 			if (pledge("stdio", NULL) == -1)
 				fatal("pledge");
+#endif /* OpenBSD */
 
 			break;
 		case IMSG_UUID:
@@ -1041,7 +1076,7 @@ parse_ia_pd_options(uint8_t *p, size_t len, struct prefix *prefix)
 				log_warn("%s", __func__);
 				break;
 			}
-			strvisx(visbuf, p + 2, opt_hdr.len - 2, VIS_SAFE);
+			strvisx(visbuf, (const char *)p + 2, opt_hdr.len - 2, VIS_SAFE);
 			log_debug("%s: %s - %s", __func__,
 			    dhcp_status2str(status_code), visbuf);
 			break;
@@ -1166,7 +1201,7 @@ state_transition(struct dhcp6leased_iface *iface, enum if_state new_state)
 	}
 
 	if_name = if_indextoname(iface->if_index, ifnamebuf);
-	log_debug("%s[%s] %s -> %s, timo: %lld", __func__, if_name == NULL ?
+	log_debug("%s[%s] %s -> %s, timo: %jd", __func__, if_name == NULL ?
 	    "?" : if_name, if_state_name[old_state], if_state_name[new_state],
 	    iface->timo.tv_sec);
 
@@ -1211,7 +1246,7 @@ iface_timeout(int fd, short events, void *arg)
 	case IF_RENEWING:
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		timespecsub(&now, &iface->request_time, &res);
-		log_debug("%s: res.tv_sec: %lld, t2: %u", __func__,
+		log_debug("%s: res.tv_sec: %jd, t2: %u", __func__,
 		    res.tv_sec, iface->t2);
 		if (res.tv_sec >= iface->t2)
 			state_transition(iface, IF_REBINDING);
@@ -1221,7 +1256,7 @@ iface_timeout(int fd, short events, void *arg)
 	case IF_REBINDING:
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		timespecsub(&now, &iface->request_time, &res);
-		log_debug("%s: res.tv_sec: %lld, lease_time: %u", __func__,
+		log_debug("%s: res.tv_sec: %jd, lease_time: %u", __func__,
 		    res.tv_sec, iface->lease_time);
 		if (res.tv_sec > iface->lease_time)
 			state_transition(iface, IF_INIT);

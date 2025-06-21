@@ -18,7 +18,11 @@
  */
 
 #include <sys/types.h>
+#if defined(__OpenBSD__)
 #include <sys/queue.h>
+#else
+#include "queue.h"
+#endif /* __OpenBSD__ */
 #include <sys/socket.h>
 #include <sys/uio.h>
 
@@ -33,6 +37,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef __dead
+#define __dead		__attribute__((__noreturn__))
+#endif
 
 #include "dhcp6leased.h"
 #include "log.h"

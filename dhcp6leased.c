@@ -20,7 +20,11 @@
  */
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#if defined(__OpenBSD__)
 #include <sys/queue.h>
+#else
+#include "queue.h"
+#endif /* __OpenBSD__ */
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syslog.h>
@@ -30,6 +34,9 @@
 
 #include <net/if.h>
 #include <net/route.h>
+#ifndef ROUTE_FILTER
+#define ROUTE_FILTER(m) (1 << (m))
+#endif
 #include <net/if_dl.h>
 #include <netinet/in.h>
 #include <netinet6/in6_var.h>
@@ -51,6 +58,10 @@
 #include <signal.h>
 #include <unistd.h>
 #include <uuid.h>
+
+#ifndef __dead
+#define __dead		__attribute__((__noreturn__))
+#endif
 
 #include "log.h"
 #include "dhcp6leased.h"
@@ -140,8 +151,14 @@ main(int argc, char *argv[])
 	char		*saved_argv0;
 	int		 pipe_main2frontend[2];
 	int		 pipe_main2engine[2];
-	int		 frontend_routesock, rtfilter, lockfd;
+	int		 frontend_routesock;
+#ifdef ROUTE_MSGFILTER
+	int		 rtfilter;
+#endif /* ROUTE_MSGFILTER */
+	int		 lockfd;
+#ifdef RTABLE_ANY
 	int		 rtable_any = RTABLE_ANY;
+#endif /* RTABLE_ANY */
 	char		*csock = _PATH_CTRL_SOCKET;
 	int		 control_fd;
 	uint8_t		*uuid;
@@ -290,19 +307,24 @@ main(int argc, char *argv[])
 	    AF_INET)) == -1)
 		fatal("route socket");
 
+#ifdef ROUTE_MSGFILTER
 	rtfilter = ROUTE_FILTER(RTM_IFINFO) | ROUTE_FILTER(RTM_IFANNOUNCE);
 	if (setsockopt(frontend_routesock, AF_ROUTE, ROUTE_MSGFILTER,
 	    &rtfilter, sizeof(rtfilter)) == -1)
 		fatal("setsockopt(ROUTE_MSGFILTER)");
+#endif /* ROUTE_MSGFILTER */
+#ifdef ROUTE_TABLEFILTER
 	if (setsockopt(frontend_routesock, AF_ROUTE, ROUTE_TABLEFILTER,
 	    &rtable_any, sizeof(rtable_any)) == -1)
 		fatal("setsockopt(ROUTE_TABLEFILTER)");
+#endif /* ROUTE_TABLEFILTER */
 
 	uuid = get_uuid();
 
 	if ((control_fd = control_init(csock)) == -1)
 		warnx("control socket setup failed");
 
+#if defined(__OpenBSD__)
 	if (unveil(conffile, "r") == -1)
 		fatal("unveil %s", conffile);
 
@@ -317,6 +339,7 @@ main(int argc, char *argv[])
 	if (pledge("stdio inet rpath wpath cpath fattr sendfd wroute", NULL)
 	    == -1)
 		fatal("pledge");
+#endif /* OpenBSD */
 
 	main_imsg_compose_frontend(IMSG_ROUTESOCK, frontend_routesock, NULL, 0);
 
@@ -811,7 +834,11 @@ open_udpsock(uint32_t if_index)
 			struct if_data		*if_data;
 
 			if_data = (struct if_data *)ifa->ifa_data;
+#ifdef SO_RTABLE
 			rdomain = if_data->ifi_rdomain;
+#else
+            rdomain = 0;
+#endif /* SO_RTABLE */
 			break;
 		}
 		case AF_INET6: {
@@ -860,6 +887,7 @@ open_udpsock(uint32_t if_index)
 	    sizeof(opt)) == -1)
 		log_warn("setting SO_REUSEADDR on socket");
 
+#ifdef SO_RTABLE
 	if (setsockopt(udpsock, SOL_SOCKET, SO_RTABLE, &rdomain,
 	    sizeof(rdomain)) == -1) {
 		/* we might race against removal of the rdomain */
@@ -867,6 +895,7 @@ open_udpsock(uint32_t if_index)
 		close(udpsock);
 		goto out;
 	}
+#endif /* SO_RTABLE */
 
 	if (bind(udpsock, (struct sockaddr *)sin6, sizeof(*sin6)) == -1) {
 		close(udpsock);
