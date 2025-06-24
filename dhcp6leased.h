@@ -22,10 +22,26 @@
 #define	nitems(_a) (sizeof((_a)) / sizeof((_a)[0]))
 #endif
 
+#if defined(__OpenBSD__)
 #define	_PATH_LOCKFILE		"/dev/dhcp6leased.lock"
+#elif defined(__FreeBSD__) || defined(__APPLE__)
+#define	_PATH_LOCKFILE		"/var/run/dhcp6leased.pid"
+#endif
+#if defined(__OpenBSD__)
 #define	_PATH_CONF_FILE		"/etc/dhcp6leased.conf"
-#define	_PATH_CTRL_SOCKET	"/dev/dhcp6leased.sock"
+#elif defined(__FreeBSD__) || defined(__APPLE__)
+#define	_PATH_CONF_FILE		"/usr/local/etc/dhcp6leased.conf"
+#endif
+#if defined(__OpenBSD__)
+#define	_PATH_CTRL_SOCKET	"/dev/dhcpleased.sock"
+#elif defined(__FreeBSD__) || defined(__APPLE__)
+#define	_PATH_CTRL_SOCKET	"/var/run/dhcpleased.sock"
+#endif
+#if defined(__OpenBSD__)
 #define	DHCP6LEASED_USER	"_dhcp6leased"
+#else
+#define	DHCP6LEASED_USER	"_dhcp"
+#endif /* __OpenBSD__ */
 #define	DHCP6LEASED_RTA_LABEL	"dhcp6leased"
 #define	CLIENT_PORT		546
 #define	SERVER_PORT		547
