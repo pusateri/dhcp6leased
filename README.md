@@ -1,7 +1,7 @@
 # dhcp6leased
 Portable version of OpenBSD dhcp6leased.
 
-- [ ] Builds on OpenBSD 7.7
+- [x] Builds on OpenBSD 7.7
 - [ ] Obtains DHCP lease on OpenBSD 7.7
 - [x] Builds on FreeBSD 15
 - [ ] Obtains DHCP lease on FreeBSD 15
